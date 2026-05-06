@@ -8,6 +8,7 @@ import 'data/elevation_tile_service.dart';
 import 'data/peak_database.dart';
 import 'data/tile_downloader.dart';
 import 'data/tile_cache.dart';
+import 'data/favorites_service.dart';
 import 'engine/panorama_engine.dart';
 import 'sensors/location_service.dart';
 import 'sensors/compass_service.dart';
@@ -18,32 +19,23 @@ import 'ui/panorama_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Lock to portrait for better panorama experience
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
 
-  // Get app directory for bundled assets
   final appDir = await getApplicationDocumentsDirectory();
   final tilesDirPath = p.join(appDir.path, 'tiles');
 
-  // Initialize services
-  final elevationService = ElevationTileService(
-    tileDirectory: tilesDirPath,
-  );
-
-  // Copy bundled tiles if not already present
+  // Elevation tiles
+  final elevationService = ElevationTileService(tileDirectory: tilesDirPath);
   final tilesDir = Directory(tilesDirPath);
   if (!tilesDir.existsSync()) {
     await tilesDir.create(recursive: true);
-    // TODO: Copy bundled .hgt tiles from assets
   }
 
-  // Initialize peak database
+  // Peak database
   final peakDbPath = p.join(appDir.path, 'peaks.sqlite');
   final peakDb = PeakDatabase(dbPath: peakDbPath);
-
-  // Check if bundled DB exists, copy from assets if needed
   final peakDbFile = File(peakDbPath);
   if (!peakDbFile.existsSync()) {
     try {
@@ -54,16 +46,19 @@ void main() async {
     }
   }
 
-  // Initialize tile downloader and cache
+  // Tile downloader & cache
   final tileDownloader = TileDownloader(
     tileDirectory: tilesDirPath,
-    apiKey: '', // Set your OpenTopography API key
+    apiKey: '',
   );
-  final tileCache = TileCache(
-    tileDirectory: tilesDirPath,
+  final tileCache = TileCache(tileDirectory: tilesDirPath);
+
+  // Favorites
+  final favoritesService = FavoritesService(
+    dbPath: p.join(appDir.path, 'favorites.sqlite'),
   );
 
-  // Initialize engine and sensors
+  // Engine & sensors
   final engine = PanoramaEngine(
     elevationService: elevationService,
     peakDatabase: peakDb,
@@ -83,6 +78,7 @@ void main() async {
     sensorFusion: sensorFusion,
     tileDownloader: tileDownloader,
     tileCache: tileCache,
+    favoritesService: favoritesService,
   ));
 }
 
@@ -92,6 +88,7 @@ class MountainPanoramaApp extends StatelessWidget {
   final SensorFusion sensorFusion;
   final TileDownloader tileDownloader;
   final TileCache tileCache;
+  final FavoritesService favoritesService;
 
   const MountainPanoramaApp({
     super.key,
@@ -100,6 +97,7 @@ class MountainPanoramaApp extends StatelessWidget {
     required this.sensorFusion,
     required this.tileDownloader,
     required this.tileCache,
+    required this.favoritesService,
   });
 
   @override
@@ -116,6 +114,7 @@ class MountainPanoramaApp extends StatelessWidget {
         sensorFusion: sensorFusion,
         tileDownloader: tileDownloader,
         tileCache: tileCache,
+        favoritesService: favoritesService,
       ),
     );
   }
