@@ -1,12 +1,13 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import '../data/tile_downloader.dart';
 import '../data/tile_cache.dart';
+import '../data/demo_data.dart';
 import '../data/favorites_service.dart';
 import '../engine/panorama_engine.dart';
 import '../models/horizon_profile.dart';
 import '../models/position.dart';
+import '../platform/platform_helper.dart';
 import '../rendering/panorama_painter.dart';
 import '../rendering/panorama_exporter.dart';
 import '../sensors/location_service.dart';
@@ -59,6 +60,12 @@ class _PanoramaScreenState extends State<PanoramaScreen> {
   }
 
   Future<void> _initSensors() async {
+    // On web, use demo data (no GPS/compass/sensors available)
+    if (PlatformHelper.instance.isWeb) {
+      _loadDemoData();
+      return;
+    }
+
     final hasPermission = await widget.locationService.requestPermission();
     if (!hasPermission) {
       setState(() => _error = 'Location permission required');
@@ -87,6 +94,15 @@ class _PanoramaScreenState extends State<PanoramaScreen> {
       setState(() => _position = pos);
       widget.sensorFusion.updatePosition(pos.latitude, pos.longitude);
       _loadPanorama(pos);
+    });
+  }
+
+  void _loadDemoData() {
+    final result = DemoData.createDemoResult();
+    setState(() {
+      _position = DemoData.demoPosition;
+      _panorama = result;
+      _loading = false;
     });
   }
 
@@ -185,10 +201,10 @@ class _PanoramaScreenState extends State<PanoramaScreen> {
         size: size,
       );
 
-      final appDir = await getApplicationDocumentsDirectory();
+      final appDir = await PlatformHelper.instance.getAppDocumentsPath();
       final path = await PanoramaExporter.saveToPng(
         image: image,
-        directory: appDir.path,
+        directory: appDir,
       );
 
       if (mounted) {

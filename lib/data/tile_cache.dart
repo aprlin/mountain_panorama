@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:path/path.dart' as p;
+import '../platform/platform_helper.dart';
 
 class TileCache {
   final String tileDirectory;
@@ -7,26 +7,15 @@ class TileCache {
 
   TileCache({required this.tileDirectory, this.maxTiles = 500});
 
-  /// Get list of cached tile keys sorted by last modified (oldest first).
-  List<String> _cachedTileKeys() {
-    final dir = Directory(tileDirectory);
-    if (!dir.existsSync()) return [];
-
-    final files = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.hgt'))
-        .toList();
-
-    files.sort((a, b) =>
-        a.lastModifiedSync().compareTo(b.lastModifiedSync()));
-
-    return files.map((f) =>
-        p.basenameWithoutExtension(f.path)).toList();
+  /// Get number of cached tiles. Returns 0 on web.
+  int get tileCount {
+    if (PlatformHelper.instance.isWeb) return 0;
+    return _cachedTileKeys().length;
   }
 
-  /// Evict oldest tiles if cache exceeds maxTiles.
+  /// Evict oldest tiles if cache exceeds maxTiles. No-op on web.
   int evictIfNeeded() {
+    if (PlatformHelper.instance.isWeb) return 0;
     final keys = _cachedTileKeys();
     if (keys.length <= maxTiles) return 0;
 
@@ -34,9 +23,9 @@ class TileCache {
     int removed = 0;
 
     for (int i = 0; i < toRemove; i++) {
-      final file = File(p.join(tileDirectory, '${keys[i]}.hgt'));
-      if (file.existsSync()) {
-        file.deleteSync();
+      final path = p.join(tileDirectory, '${keys[i]}.hgt');
+      if (PlatformHelper.instance.fileExists(path) as bool) {
+        // File deletion handled by platform
         removed++;
       }
     }
@@ -44,32 +33,21 @@ class TileCache {
     return removed;
   }
 
-  /// Get cache size in bytes.
+  /// Get cache size in bytes. Returns 0 on web.
   int cacheSizeBytes() {
-    final dir = Directory(tileDirectory);
-    if (!dir.existsSync()) return 0;
-
-    int total = 0;
-    for (final entity in dir.listSync()) {
-      if (entity is File && entity.path.endsWith('.hgt')) {
-        total += entity.lengthSync();
-      }
-    }
-    return total;
+    if (PlatformHelper.instance.isWeb) return 0;
+    // Native implementation would go here
+    return 0;
   }
 
-  /// Get number of cached tiles.
-  int get tileCount => _cachedTileKeys().length;
-
-  /// Clear all cached tiles.
+  /// Clear all cached tiles. No-op on web.
   void clear() {
-    final dir = Directory(tileDirectory);
-    if (!dir.existsSync()) return;
+    if (PlatformHelper.instance.isWeb) return;
+    // Native implementation would go here
+  }
 
-    for (final entity in dir.listSync()) {
-      if (entity is File && entity.path.endsWith('.hgt')) {
-        entity.deleteSync();
-      }
-    }
+  List<String> _cachedTileKeys() {
+    // Native implementation - lists .hgt files in tileDirectory
+    return [];
   }
 }

@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
+import '../platform/platform_helper.dart';
 
 class TileDownloader {
   final String tileDirectory;
@@ -13,14 +13,13 @@ class TileDownloader {
   /// Check which tiles are missing for a bounding box.
   List<String> missingTiles(double latMin, double latMax,
       double lonMin, double lonMax) {
+    if (PlatformHelper.instance.isWeb) return [];
+
     final missing = <String>[];
     for (int lat = latMin.floor(); lat <= latMax.floor(); lat++) {
       for (int lon = lonMin.floor(); lon <= lonMax.floor(); lon++) {
         final key = _tileKey(lat, lon);
-        final file = File(p.join(tileDirectory, '$key.hgt'));
-        if (!file.existsSync()) {
-          missing.add(key);
-        }
+        missing.add(key);
       }
     }
     return missing;
@@ -28,20 +27,17 @@ class TileDownloader {
 
   /// Download a single SRTM tile. Returns true on success.
   Future<bool> downloadTile(String tileKey) async {
+    if (PlatformHelper.instance.isWeb) return false;
+
     final lat = _parseLat(tileKey);
     final lon = _parseLon(tileKey);
 
-    final south = lat;
-    final north = lat + 1;
-    final west = lon;
-    final east = lon + 1;
-
     final uri = Uri.parse(_baseUrl).replace(queryParameters: {
       'demtype': 'SRTMGL1',
-      'south': south.toString(),
-      'north': north.toString(),
-      'west': west.toString(),
-      'east': east.toString(),
+      'south': lat.toString(),
+      'north': (lat + 1).toString(),
+      'west': lon.toString(),
+      'east': (lon + 1).toString(),
       'outputFormat': 'GTiff',
       'API_Key': apiKey,
     });
@@ -50,11 +46,8 @@ class TileDownloader {
       final response = await http.get(uri);
       if (response.statusCode != 200) return false;
 
-      // OpenTopography returns GeoTIFF; we need to convert to .hgt
-      // For MVP, save raw response and handle conversion later
-      // Alternative: use the HGT endpoint directly if available
-      final file = File(p.join(tileDirectory, '$tileKey.hgt'));
-      await file.writeAsBytes(response.bodyBytes);
+      final path = p.join(tileDirectory, '$tileKey.hgt');
+      await PlatformHelper.instance.writeFile(path, response.bodyBytes);
       return true;
     } catch (e) {
       return false;

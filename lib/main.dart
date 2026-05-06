@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'dart:io';
 
 import 'data/elevation_tile_service.dart';
 import 'data/peak_database.dart';
@@ -10,6 +8,7 @@ import 'data/tile_downloader.dart';
 import 'data/tile_cache.dart';
 import 'data/favorites_service.dart';
 import 'engine/panorama_engine.dart';
+import 'platform/platform_helper.dart';
 import 'sensors/location_service.dart';
 import 'sensors/compass_service.dart';
 import 'sensors/orientation_service.dart';
@@ -18,29 +17,29 @@ import 'ui/panorama_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final platform = PlatformHelper.instance;
 
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
+  if (!platform.isWeb) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+  }
 
-  final appDir = await getApplicationDocumentsDirectory();
-  final tilesDirPath = p.join(appDir.path, 'tiles');
+  final appDir = await platform.getAppDocumentsPath();
+  final tilesDirPath = p.join(appDir, 'tiles');
 
   // Elevation tiles
   final elevationService = ElevationTileService(tileDirectory: tilesDirPath);
-  final tilesDir = Directory(tilesDirPath);
-  if (!tilesDir.existsSync()) {
-    await tilesDir.create(recursive: true);
-  }
+  await platform.createDirectory(tilesDirPath);
 
   // Peak database
-  final peakDbPath = p.join(appDir.path, 'peaks.sqlite');
+  final peakDbPath = p.join(appDir, 'peaks.sqlite');
   final peakDb = PeakDatabase(dbPath: peakDbPath);
-  final peakDbFile = File(peakDbPath);
-  if (!peakDbFile.existsSync()) {
+
+  if (!platform.isWeb && !await platform.fileExists(peakDbPath)) {
     try {
       final data = await rootBundle.load('assets/peaks.sqlite');
-      await peakDbFile.writeAsBytes(data.buffer.asUint8List());
+      await platform.writeFile(peakDbPath, data.buffer.asUint8List());
     } catch (e) {
       debugPrint('No bundled peaks.sqlite found: $e');
     }
@@ -55,7 +54,7 @@ void main() async {
 
   // Favorites
   final favoritesService = FavoritesService(
-    dbPath: p.join(appDir.path, 'favorites.sqlite'),
+    dbPath: p.join(appDir, 'favorites.sqlite'),
   );
 
   // Engine & sensors

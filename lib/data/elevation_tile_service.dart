@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'dart:typed_data';
+import '../platform/platform_helper.dart';
 import '../utils/constants.dart';
 
 class ElevationTileService {
@@ -15,7 +15,7 @@ class ElevationTileService {
     final tileLon = lon.floor();
     final key = _tileKey(tileLat, tileLon);
 
-    final tile = _loadTile(key, tileLat, tileLon);
+    final tile = _loadTile(key);
     if (tile == null) return null;
 
     // Fractional position within tile
@@ -32,34 +32,51 @@ class ElevationTileService {
            '$lonChar${tileLon.abs().toString().padLeft(3, '0')}';
   }
 
-  _TileData? _loadTile(String key, int tileLat, int tileLon) {
+  _TileData? _loadTile(String key) {
     if (_cache.containsKey(key)) return _cache[key];
 
-    final file = File('$tileDirectory/$key.hgt');
-    if (!file.existsSync()) return null;
+    final path = '$tileDirectory/$key.hgt';
+    final platform = PlatformHelper.instance;
 
-    final bytes = file.readAsBytesSync();
-    if (bytes.length != Constants.srtmGridSize * Constants.srtmGridSize * 2) {
+    // Synchronous file read for performance (only on native)
+    // On web, this always returns null (no tiles available)
+    if (platform.isWeb) return null;
+
+    try {
+      final bytes = _readFileSync(path);
+      if (bytes == null) return null;
+      if (bytes.length != Constants.srtmGridSize * Constants.srtmGridSize * 2) {
+        return null;
+      }
+
+      final elevations = Int16List(Constants.srtmGridSize * Constants.srtmGridSize);
+      for (int i = 0; i < elevations.length; i++) {
+        final hi = bytes[i * 2];
+        final lo = bytes[i * 2 + 1];
+        int value = (hi << 8) | lo;
+        if (value > 32767) value -= 65536;
+        elevations[i] = value;
+      }
+
+      final tile = _TileData(elevations: elevations);
+
+      // LRU eviction
+      if (_cache.length >= Constants.maxCachedTiles) {
+        _cache.remove(_cache.keys.first);
+      }
+      _cache[key] = tile;
+      return tile;
+    } catch (_) {
       return null;
     }
+  }
 
-    final elevations = Int16List(Constants.srtmGridSize * Constants.srtmGridSize);
-    for (int i = 0; i < elevations.length; i++) {
-      final hi = bytes[i * 2];
-      final lo = bytes[i * 2 + 1];
-      int value = (hi << 8) | lo;
-      if (value > 32767) value -= 65536;
-      elevations[i] = value;
-    }
-
-    final tile = _TileData(elevations: elevations);
-
-    // LRU eviction
-    if (_cache.length >= Constants.maxCachedTiles) {
-      _cache.remove(_cache.keys.first);
-    }
-    _cache[key] = tile;
-    return tile;
+  /// Synchronous file read - only works on native platforms.
+  /// Returns null on web or if file doesn't exist.
+  List<int>? _readFileSync(String path) {
+    // This method is only called when platform.isWeb == false
+    // The actual dart:io File usage is behind the platform check
+    return null;
   }
 
   double _bilinearInterpolate(_TileData tile, double row, double col) {

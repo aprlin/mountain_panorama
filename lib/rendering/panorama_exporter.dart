@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../models/horizon_profile.dart';
+import '../platform/platform_helper.dart';
 import 'panorama_painter.dart';
 
 class PanoramaExporter {
@@ -47,8 +47,13 @@ class PanoramaExporter {
 
     final name = filename ??
         'panorama_${DateTime.now().millisecondsSinceEpoch}.png';
-    final file = File('$directory/$name');
-    await file.writeAsBytes(byteData.buffer.asUint8List());
-    return file.path;
+    final path = '$directory/$name';
+
+    await PlatformHelper.instance.writeFile(
+      path,
+      byteData.buffer.asUint8List(),
+    );
+
+    return path;
   }
 }
