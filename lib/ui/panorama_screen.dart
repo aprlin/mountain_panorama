@@ -1,5 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../data/tile_downloader.dart';
+import '../data/tile_cache.dart';
 import '../engine/panorama_engine.dart';
 import '../models/horizon_profile.dart';
 import '../models/position.dart';
@@ -7,17 +9,22 @@ import '../rendering/panorama_painter.dart';
 import '../sensors/location_service.dart';
 import '../sensors/sensor_fusion.dart';
 import '../utils/constants.dart';
+import 'settings_screen.dart';
 
 class PanoramaScreen extends StatefulWidget {
   final PanoramaEngine engine;
   final LocationService locationService;
   final SensorFusion sensorFusion;
+  final TileDownloader? tileDownloader;
+  final TileCache? tileCache;
 
   const PanoramaScreen({
     super.key,
     required this.engine,
     required this.locationService,
     required this.sensorFusion,
+    this.tileDownloader,
+    this.tileCache,
   });
 
   @override
@@ -67,6 +74,7 @@ class _PanoramaScreenState extends State<PanoramaScreen> {
     try {
       final pos = await widget.locationService.getCurrentPosition();
       setState(() => _position = pos);
+      widget.sensorFusion.updatePosition(pos.latitude, pos.longitude);
       await _loadPanorama(pos);
     } catch (e) {
       setState(() => _error = 'Failed to get location: $e');
@@ -75,6 +83,7 @@ class _PanoramaScreenState extends State<PanoramaScreen> {
     // Listen for position updates
     widget.locationService.positionStream.listen((pos) {
       setState(() => _position = pos);
+      widget.sensorFusion.updatePosition(pos.latitude, pos.longitude);
       _loadPanorama(pos);
     });
   }
@@ -137,6 +146,18 @@ class _PanoramaScreenState extends State<PanoramaScreen> {
     }
 
     setState(() => _selectedPeak = closest);
+  }
+
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(
+          downloader: widget.tileDownloader,
+          tileCache: widget.tileCache,
+        ),
+      ),
+    );
   }
 
   @override
@@ -228,21 +249,39 @@ class _PanoramaScreenState extends State<PanoramaScreen> {
                           ),
                         ),
                       ),
-                      // Peak count
+                      // Peak count + settings button
                       Positioned(
                         top: MediaQuery.of(context).padding.top + 8,
                         right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${_panorama!.visiblePeaks.length} peaks visible',
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 12),
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${_panorama!.visiblePeaks.length} peaks',
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 12),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: _openSettings,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.settings,
+                                    color: Colors.white, size: 20),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       // Selected peak info

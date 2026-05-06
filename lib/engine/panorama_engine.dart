@@ -2,8 +2,9 @@ import '../models/horizon_profile.dart';
 import '../models/position.dart';
 import '../data/elevation_tile_service.dart';
 import '../data/peak_database.dart';
+import '../utils/constants.dart';
 import 'coordinate_math.dart';
-import 'ray_caster.dart';
+import 'isolate_ray_caster.dart';
 import 'visibility_calculator.dart';
 
 class PanoramaResult {
@@ -16,7 +17,6 @@ class PanoramaResult {
 class PanoramaEngine {
   final ElevationTileService elevationService;
   final PeakDatabase peakDatabase;
-  late final RayCaster _rayCaster;
   late final VisibilityCalculator _visibilityCalculator;
 
   PanoramaResult? _cachedResult;
@@ -26,7 +26,6 @@ class PanoramaEngine {
     required this.elevationService,
     required this.peakDatabase,
   }) {
-    _rayCaster = RayCaster(elevationService: elevationService);
     _visibilityCalculator = VisibilityCalculator();
   }
 
@@ -37,13 +36,23 @@ class PanoramaEngine {
         _cachedPosition!.latitude, _cachedPosition!.longitude,
         observer.latitude, observer.longitude,
       );
-      if (moved < 100) {
+      if (moved < Constants.horizonCacheMoveThreshold) {
         return _cachedResult!;
       }
     }
 
-    // Cast rays for horizon profile
-    final horizon = _rayCaster.castRays(observer);
+    // Pre-load tiles for the area around the observer
+    _ensureTilesLoaded(observer);
+
+    // Export tile data for isolate transfer
+    final tileData = TileElevationData(
+      tiles: elevationService.exportTiles(),
+      gridSize: Constants.srtmGridSize,
+    );
+
+    // Cast rays in background isolate
+    final horizon = await IsolateRayCaster.castRays(
+      observer, tileData);
 
     // Query nearby peaks
     final peaks = await peakDatabase.queryPeaksInBounds(
@@ -61,6 +70,18 @@ class PanoramaEngine {
     _cachedResult = result;
     _cachedPosition = observer;
     return result;
+  }
+
+  /// Pre-load elevation tiles for the area the rays will traverse.
+  void _ensureTilesLoaded(GeoPosition observer) {
+    final lat = observer.latitude;
+    final lon = observer.longitude;
+    // Load tiles within ±2° of observer (covers 200km ray distance)
+    for (int dLat = -2; dLat <= 2; dLat++) {
+      for (int dLon = -2; dLon <= 2; dLon++) {
+        elevationService.getElevation(lat + dLat, lon + dLon);
+      }
+    }
   }
 
   void invalidateCache() {

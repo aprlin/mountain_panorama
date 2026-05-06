@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'compass_service.dart';
 import 'orientation_service.dart';
-import '../utils/constants.dart';
 
 class SensorFusion {
   final CompassService compass;
@@ -19,6 +18,11 @@ class SensorFusion {
 
   Stream<FusedOrientation> get orientationStream => _controller.stream;
 
+  /// Update declination from GPS position.
+  void updatePosition(double latitude, double longitude) {
+    compass.updateDeclination(latitude, longitude);
+  }
+
   void start() {
     _compassSub = compass.headingStream.listen((h) {
       _heading = h;
@@ -26,9 +30,7 @@ class SensorFusion {
     });
 
     _orientSub = orientation.pitchStream.listen((p) {
-      // Complementary filter for pitch
-      final alpha = Constants.pitchComplementaryAlpha;
-      _pitch = alpha * _pitch + (1 - alpha) * p;
+      _pitch = p;
       _emit();
     });
   }

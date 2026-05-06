@@ -82,6 +82,13 @@ class ElevationTileService {
         v11 * fr * fc;
   }
 
+  /// Export loaded tiles for isolate transfer.
+  Map<String, Int16List> exportTiles() {
+    return Map.fromEntries(
+      _cache.entries.map((e) => MapEntry(e.key, e.value.elevations)),
+    );
+  }
+
   void clearCache() => _cache.clear();
 }
 

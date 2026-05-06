@@ -6,6 +6,8 @@ import 'dart:io';
 
 import 'data/elevation_tile_service.dart';
 import 'data/peak_database.dart';
+import 'data/tile_downloader.dart';
+import 'data/tile_cache.dart';
 import 'engine/panorama_engine.dart';
 import 'sensors/location_service.dart';
 import 'sensors/compass_service.dart';
@@ -23,18 +25,18 @@ void main() async {
 
   // Get app directory for bundled assets
   final appDir = await getApplicationDocumentsDirectory();
+  final tilesDirPath = p.join(appDir.path, 'tiles');
 
   // Initialize services
   final elevationService = ElevationTileService(
-    tileDirectory: p.join(appDir.path, 'tiles'),
+    tileDirectory: tilesDirPath,
   );
 
   // Copy bundled tiles if not already present
-  final tilesDir = Directory(p.join(appDir.path, 'tiles'));
+  final tilesDir = Directory(tilesDirPath);
   if (!tilesDir.existsSync()) {
     await tilesDir.create(recursive: true);
     // TODO: Copy bundled .hgt tiles from assets
-    // For now, the app expects tiles to be placed manually
   }
 
   // Initialize peak database
@@ -51,6 +53,15 @@ void main() async {
       debugPrint('No bundled peaks.sqlite found: $e');
     }
   }
+
+  // Initialize tile downloader and cache
+  final tileDownloader = TileDownloader(
+    tileDirectory: tilesDirPath,
+    apiKey: '', // Set your OpenTopography API key
+  );
+  final tileCache = TileCache(
+    tileDirectory: tilesDirPath,
+  );
 
   // Initialize engine and sensors
   final engine = PanoramaEngine(
@@ -70,6 +81,8 @@ void main() async {
     engine: engine,
     locationService: locationService,
     sensorFusion: sensorFusion,
+    tileDownloader: tileDownloader,
+    tileCache: tileCache,
   ));
 }
 
@@ -77,12 +90,16 @@ class MountainPanoramaApp extends StatelessWidget {
   final PanoramaEngine engine;
   final LocationService locationService;
   final SensorFusion sensorFusion;
+  final TileDownloader tileDownloader;
+  final TileCache tileCache;
 
   const MountainPanoramaApp({
     super.key,
     required this.engine,
     required this.locationService,
     required this.sensorFusion,
+    required this.tileDownloader,
+    required this.tileCache,
   });
 
   @override
@@ -97,6 +114,8 @@ class MountainPanoramaApp extends StatelessWidget {
         engine: engine,
         locationService: locationService,
         sensorFusion: sensorFusion,
+        tileDownloader: tileDownloader,
+        tileCache: tileCache,
       ),
     );
   }
